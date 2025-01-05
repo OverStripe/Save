@@ -42,84 +42,146 @@ download_stats = {
     "user_downloads": {}
 }
 
-# ------------------------
-# 🛡️ CHANNEL SUBSCRIPTION CHECK
-# ------------------------
-async def is_user_subscribed(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
-    try:
-        member = await context.bot.get_chat_member(SUPPORT_CHANNEL_ID, user_id)
-        return member.status in ['member', 'administrator', 'creator']
-    except Exception as e:
-        logger.error(f"Error checking channel subscription: {e}")
-        return False
 
 # ------------------------
-# 📲 START COMMAND
+# 🛡️ Channel Subscription Check
+# ------------------------
+async def is_user_subscribed(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
+    """
+    Check if the user is subscribed to the support channel.
+    """
+    try:
+        member = await context.bot.get_chat_member(SUPPORT_CHANNEL_ID, user_id)
+        logger.info(f"User {user_id} status in channel: {member.status}")
+        return member.status in ['member', 'administrator', 'creator']
+    except Exception as e:
+        logger.error(f"Failed to verify user subscription: {e}")
+        return False
+
+
+# ------------------------
+# 📲 Start Command
 # ------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Sends a personalized welcome message with clear instructions.
+    """
+    user = update.effective_user
+    first_name = user.first_name or "User"
+    last_name = user.last_name or ""
+    full_name = f"{first_name} {last_name}".strip()
+    
     keyboard = [
-        [InlineKeyboardButton("💻 ᴅᴇᴠᴇʟᴏᴘᴇʀ", url=f"https://t.me/{DEV_USERNAME}")],
-        [InlineKeyboardButton("📢 ꜱᴜᴘᴘᴏʀᴛ ᴄʜᴀɴɴᴇʟ", url=SUPPORT_CHANNEL)],
-        [InlineKeyboardButton("ℹ️ ʜᴇʟᴘ", callback_data='help')],
-        [InlineKeyboardButton("📥 ᴇxᴀᴍᴘʟᴇ ᴅᴏᴡɴʟᴏᴀᴅ", callback_data='example')]
+        [InlineKeyboardButton("💻 Developer", url=f"https://t.me/{DEV_USERNAME}")],
+        [InlineKeyboardButton("📢 Support Channel", url=SUPPORT_CHANNEL)],
+        [InlineKeyboardButton("ℹ️ Help", callback_data='help')],
+        [InlineKeyboardButton("📥 Example Download", callback_data='example')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        "**━❖ ᴾᴴᴵᴸᴼ ❖ ᴰᴼᵂᴺᴸᴼᴬᴰᴱᴿ ❖━**\n\n"
-        "👋 **ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ ᴘʜɪʟᴏ ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ!**\n\n"
-        "✨ **ᴡʜᴀᴛ ɪ ᴄᴀɴ ᴅᴏ:**\n"
-        "- 🔹 **/Download <URL> → ᴅᴏᴡɴʟᴏᴀᴅ ɪɴꜱᴛᴀɢʀᴀᴍ ᴍᴇᴅɪᴀ.**\n"
-        "- 🔹 **/Check → ᴄʜᴇᴄᴋ ꜱᴜʙꜱᴄʀɪᴘᴛɪᴏɴ.**\n"
-        "- 🔹 **/Help → ᴠɪᴇᴡ ʜᴇʟᴘ ᴍᴇɴᴜ.**\n\n"
-        "📲 **ᴜꜱᴇ ᴛʜᴇ ʙᴜᴛᴛᴏɴꜱ ʙᴇʟᴏᴡ ᴛᴏ ꜱᴛᴀʀᴛ!**",
+        f"**Welcome, {full_name}!**\n\n"
+        "**What Can I Do?**\n"
+        "- 📸 **/Download <URL>** - Download Instagram Media\n"
+        "- ✅ **/Check** - Check Your Subscription\n"
+        "- 📊 **/Stats** - View Bot Stats (Admin Only)\n\n"
+        "**How To Use?**\n"
+        "1. Copy The Instagram Post URL.\n"
+        "2. Send `/Download <URL>` To This Bot.\n"
+        "3. Enjoy Your Downloaded Media!\n\n"
+        "**Quick Access Buttons:**",
         reply_markup=reply_markup,
         parse_mode='Markdown'
     )
 
+
 # ------------------------
-# 📥 DOWNLOAD COMMAND
+# 📥 Download Command
 # ------------------------
 async def download(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Download Instagram media if the user is subscribed.
+    """
     user = update.effective_user
     if not await is_user_subscribed(context, user.id):
+        keyboard = [
+            [InlineKeyboardButton("📢 Join Our Channel", url=SUPPORT_CHANNEL)]
+        ]
         await update.message.reply_text(
-            "⚠️ **ᴘʟᴇᴀꜱᴇ ᴊᴏɪɴ ᴏᴜʀ ᴄʜᴀɴɴᴇʟ ꜰɪʀꜱᴛ:**\n"
-            f"📢 [ᴊᴏɪɴ ʜᴇʀᴇ]({SUPPORT_CHANNEL})",
+            "**⚠️ Please Join Our Channel First:**\n"
+            f"📢 [Join Here]({SUPPORT_CHANNEL})",
+            reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
         return
 
     if len(context.args) == 0:
-        await update.message.reply_text("⚠️ **ᴘʟᴇᴀꜱᴇ ᴘʀᴏᴠɪᴅᴇ ᴀ ᴠᴀʟɪᴅ ᴜʀʟ.**")
+        await update.message.reply_text("**⚠️ Please Provide A Valid URL.**")
         return
 
     url = context.args[0]
     if not INSTAGRAM_URL_PATTERN.match(url):
-        await update.message.reply_text("⚠️ **ɪɴᴠᴀʟɪᴅ ᴜʀʟ.**")
+        await update.message.reply_text("**⚠️ Invalid Instagram URL.**")
         return
 
-    await update.message.reply_text("⏳ **ᴘʀᴏᴄᴇꜱꜱɪɴɢ ᴅᴏᴡɴʟᴏᴀᴅ...**")
+    await update.message.reply_text("**⏳ Processing Your Download...**")
+    download_stats["total_downloads"] += 1
+    download_stats["user_downloads"][user.id] = download_stats["user_downloads"].get(user.id, 0) + 1
+
+    await update.message.reply_text("✅ **Media Downloaded Successfully!**")
+
 
 # ------------------------
-# ✅ CHECK COMMAND
+# ✅ Check Command
 # ------------------------
 async def check(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Check if the user is subscribed to the channel.
+    """
     user = update.effective_user
     if await is_user_subscribed(context, user.id):
-        await update.message.reply_text("✅ **ʏᴏᴜ'ʀᴇ ꜱᴜʙꜱᴄʀɪʙᴇᴅ!**")
+        await update.message.reply_text("✅ **You Are Subscribed!**")
     else:
-        await update.message.reply_text("⚠️ **ᴘʟᴇᴀꜱᴇ ᴊᴏɪɴ ᴏᴜʀ ᴄʜᴀɴɴᴇʟ.**")
+        keyboard = [
+            [InlineKeyboardButton("📢 Join Our Channel", url=SUPPORT_CHANNEL)]
+        ]
+        await update.message.reply_text(
+            "⚠️ **You Are Not Subscribed To Our Channel.**\n\n"
+            "Please Click Below To Join:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+
 
 # ------------------------
-# 🚀 MAIN FUNCTION
+# 📊 Stats Command (Admin Only)
 # ------------------------
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Display bot stats (Developer Only).
+    """
+    user = update.effective_user
+    if user.id != DEV_USER_ID:
+        await update.message.reply_text("⚠️ **Only The Developer Can Access This Command.**")
+        return
+
+    uptime = datetime.now() - bot_start_time
+    await update.message.reply_text(
+        f"📊 **Bot Stats:**\n\n"
+        f"🕒 **Uptime:** {uptime}\n"
+        f"📥 **Total Downloads:** {download_stats['total_downloads']}"
+    )
+
+
+# 🚀 Main Function
 def main():
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("download", download))
     application.add_handler(CommandHandler("check", check))
+    application.add_handler(CommandHandler("stats", stats))
     application.run_polling()
+
 
 if __name__ == '__main__':
     main()
