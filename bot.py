@@ -21,9 +21,10 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-SUPPORT_GROUP = os.getenv("SUPPORT_GROUP")
+SUPPORT_CHANNEL = os.getenv("SUPPORT_CHANNEL")
 DEV_USERNAME = os.getenv("DEV_USERNAME")
-SUPPORT_GROUP_ID = int(os.getenv("SUPPORT_GROUP_ID"))
+SUPPORT_CHANNEL_ID = int(os.getenv("SUPPORT_CHANNEL_ID"))
+DEV_USER_ID = int(os.getenv("DEV_USER_ID"))
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
@@ -43,26 +44,26 @@ download_stats = {
 }
 
 # ------------------------
-# 🛡️ GROUP MEMBERSHIP CHECK
+# 🛡️ CHANNEL SUBSCRIPTION CHECK
 # ------------------------
-async def is_user_in_group(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
+async def is_user_subscribed(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
     try:
-        member = await context.bot.get_chat_member(SUPPORT_GROUP_ID, user_id)
+        member = await context.bot.get_chat_member(SUPPORT_CHANNEL_ID, user_id)
         return member.status in ['member', 'administrator', 'creator']
     except Exception as e:
-        logger.error(f"Error checking group membership: {e}")
+        logger.error(f"Error checking channel subscription: {e}")
         return False
 
-async def enforce_group_membership(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+async def enforce_channel_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user = update.effective_user
-    if not await is_user_in_group(context, user.id):
+    if not await is_user_subscribed(context, user.id):
         keyboard = [
-            [InlineKeyboardButton("🛠️ Join Support Group", url=f"https://t.me/{SUPPORT_GROUP}")]
+            [InlineKeyboardButton("📢 Join Our Channel", url=SUPPORT_CHANNEL)]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
-            "⚠️ **You must join our support group before using this bot.**\n\n"
-            f"🛡️ [Join Support Group]({SUPPORT_GROUP})",
+            "⚠️ **You must subscribe to our channel before using this bot.**\n\n"
+            f"📢 [Join Channel]({SUPPORT_CHANNEL})",
             reply_markup=reply_markup,
             parse_mode='Markdown'
         )
@@ -73,14 +74,14 @@ async def enforce_group_membership(update: Update, context: ContextTypes.DEFAULT
 # 📲 START COMMAND
 # ------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not await enforce_group_membership(update, context):
+    if not await enforce_channel_subscription(update, context):
         return
     
     keyboard = [
         [InlineKeyboardButton("💻 Developer", url=f"https://t.me/{DEV_USERNAME}")],
-        [InlineKeyboardButton("🛠️ Support Group", url=f"https://t.me/{SUPPORT_GROUP}")],
+        [InlineKeyboardButton("📢 Channel", url=SUPPORT_CHANNEL)],
         [InlineKeyboardButton("ℹ️ Help", callback_data='help')],
-        [InlineKeyboardButton("📊 Stats", callback_data='stats')]
+        [InlineKeyboardButton("📥 Download Example", callback_data='example')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -90,7 +91,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "🔗 **How to Use:**\n"
         "1️⃣ Send me an Instagram post URL.\n"
         "2️⃣ Use `/download <URL>` to fetch media.\n\n"
-        "📲 **Quick Links Below!**",
+        "📲 **Quick Access Below:**",
         reply_markup=reply_markup,
         parse_mode='Markdown'
     )
@@ -99,7 +100,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # 📥 DOWNLOAD COMMAND
 # ------------------------
 async def download(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not await enforce_group_membership(update, context):
+    if not await enforce_channel_subscription(update, context):
         return
 
     user = update.effective_user
@@ -112,11 +113,10 @@ async def download(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("⚠️ Invalid Instagram URL. Please provide a valid Instagram post URL.")
         return
 
-    await update.message.reply_text("⏳ **Processing your request... Please wait.**")
+    await update.message.reply_text("⏳ **Downloading your media... Please wait.**")
     try:
         shortcode = url.split("/p/")[1].split("/")[0]
         post = Post.from_shortcode(loader.context, shortcode)
-        media_type = "video" if post.is_video else "photo"
 
         loader.download_post(post, target='downloads')
         file_path = f"downloads/{shortcode}.{'mp4' if post.is_video else 'jpg'}"
@@ -126,7 +126,6 @@ async def download(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         else:
             await update.message.reply_photo(open(file_path, "rb"))
 
-        # Update Stats
         download_stats["total_downloads"] += 1
         download_stats["user_downloads"][user.id] = download_stats["user_downloads"].get(user.id, 0) + 1
 
@@ -137,20 +136,23 @@ async def download(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("❌ Failed to download the post. Please try again later.")
 
 # ------------------------
-# 📊 STATS COMMAND
+# ℹ️ HELP COMMAND
 # ------------------------
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uptime = datetime.now() - bot_start_time
-    uptime_str = str(timedelta(seconds=int(uptime.total_seconds())))
-
-    user = update.effective_user
-    user_downloads = download_stats["user_downloads"].get(user.id, 0)
-
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    keyboard = [
+        [InlineKeyboardButton("🏠 Home", callback_data='home')],
+        [InlineKeyboardButton("📢 Channel", url=SUPPORT_CHANNEL)],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     await update.message.reply_text(
-        f"📊 **Bot Statistics:**\n\n"
-        f"🕒 **Uptime:** `{uptime_str}`\n"
-        f"📥 **Total Downloads:** `{download_stats['total_downloads']}`\n"
-        f"👤 **Your Downloads:** `{user_downloads}`",
+        "**ℹ️ Help Menu**\n\n"
+        "📝 **Commands:**\n"
+        "- `/start` → Start the bot.\n"
+        "- `/download <URL>` → Download Instagram media.\n"
+        "- `/stats` → (Developer Only)\n\n"
+        "📲 Use the buttons below for quick access.",
+        reply_markup=reply_markup,
         parse_mode='Markdown'
     )
 
@@ -160,8 +162,8 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 def main():
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("download", download))
-    application.add_handler(CommandHandler("stats", stats))
     application.run_polling()
 
 if __name__ == '__main__':
