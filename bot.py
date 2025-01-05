@@ -3,7 +3,7 @@
 import os
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -12,6 +12,7 @@ from telegram import (
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
+    CallbackQueryHandler,
     ContextTypes,
 )
 from instaloader import Instaloader, Post
@@ -47,15 +48,12 @@ download_stats = {
 # 🛡️ Channel Subscription Check
 # ------------------------
 async def is_user_subscribed(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
-    """
-    Check if the user is subscribed to the support channel.
-    """
     try:
         member = await context.bot.get_chat_member(SUPPORT_CHANNEL_ID, user_id)
-        logger.info(f"User {user_id} status in channel: {member.status}")
+        logger.info(f"User {user_id} membership status: {member.status}")
         return member.status in ['member', 'administrator', 'creator']
     except Exception as e:
-        logger.error(f"Failed to verify user subscription: {e}")
+        logger.error(f"Failed to verify subscription: {e}")
         return False
 
 
@@ -63,14 +61,11 @@ async def is_user_subscribed(context: ContextTypes.DEFAULT_TYPE, user_id: int) -
 # 📲 Start Command
 # ------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Sends a personalized welcome message with clear instructions.
-    """
     user = update.effective_user
     first_name = user.first_name or "User"
     last_name = user.last_name or ""
     full_name = f"{first_name} {last_name}".strip()
-    
+
     keyboard = [
         [InlineKeyboardButton("💻 Developer", url=f"https://t.me/{DEV_USERNAME}")],
         [InlineKeyboardButton("📢 Support Channel", url=SUPPORT_CHANNEL)],
@@ -96,90 +91,84 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 # ------------------------
-# 📥 Download Command
+# ✅ Check Command (Three Options)
 # ------------------------
-async def download(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Download Instagram media if the user is subscribed.
-    """
-    user = update.effective_user
-    if not await is_user_subscribed(context, user.id):
-        keyboard = [
-            [InlineKeyboardButton("📢 Join Our Channel", url=SUPPORT_CHANNEL)]
-        ]
-        await update.message.reply_text(
-            "**⚠️ Please Join Our Channel First:**\n"
-            f"📢 [Join Here]({SUPPORT_CHANNEL})",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-        return
 
-    if len(context.args) == 0:
-        await update.message.reply_text("**⚠️ Please Provide A Valid URL.**")
-        return
-
-    url = context.args[0]
-    if not INSTAGRAM_URL_PATTERN.match(url):
-        await update.message.reply_text("**⚠️ Invalid Instagram URL.**")
-        return
-
-    await update.message.reply_text("**⏳ Processing Your Download...**")
-    download_stats["total_downloads"] += 1
-    download_stats["user_downloads"][user.id] = download_stats["user_downloads"].get(user.id, 0) + 1
-
-    await update.message.reply_text("✅ **Media Downloaded Successfully!**")
-
-
-# ------------------------
-# ✅ Check Command
-# ------------------------
-async def check(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Check if the user is subscribed to the channel.
-    """
-    user = update.effective_user
-    if await is_user_subscribed(context, user.id):
-        await update.message.reply_text("✅ **You Are Subscribed!**")
-    else:
-        keyboard = [
-            [InlineKeyboardButton("📢 Join Our Channel", url=SUPPORT_CHANNEL)]
-        ]
-        await update.message.reply_text(
-            "⚠️ **You Are Not Subscribed To Our Channel.**\n\n"
-            "Please Click Below To Join:",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-
-
-# ------------------------
-# 📊 Stats Command (Admin Only)
-# ------------------------
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Display bot stats (Developer Only).
-    """
-    user = update.effective_user
-    if user.id != DEV_USER_ID:
-        await update.message.reply_text("⚠️ **Only The Developer Can Access This Command.**")
-        return
-
-    uptime = datetime.now() - bot_start_time
+# ✅ Option 1: Forwarded Message Validation
+async def check_option1(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        f"📊 **Bot Stats:**\n\n"
-        f"🕒 **Uptime:** {uptime}\n"
-        f"📥 **Total Downloads:** {download_stats['total_downloads']}"
+        "**🔍 Subscription Check Required**\n\n"
+        "Please Forward Any Message From Our Channel To This Bot:\n"
+        f"📢 [{SUPPORT_CHANNEL}]({SUPPORT_CHANNEL})",
+        parse_mode='Markdown'
     )
 
 
+# ✅ Option 2: Inline Button Validation
+async def check_option2(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    keyboard = [
+        [InlineKeyboardButton("📢 Verify Subscription", url=SUPPORT_CHANNEL)]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "**🔍 Subscription Check Required**\n\n"
+        "Please Click The Button Below To Verify Your Subscription:",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
+
+# ✅ Option 3: Manual Confirmation (Developer Only)
+async def check_option3(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    if user.id != DEV_USER_ID:
+        await update.message.reply_text("⚠️ **This Option Is Only Available For The Developer.**")
+        return
+    
+    keyboard = [
+        [InlineKeyboardButton("📢 Join Our Channel", url=SUPPORT_CHANNEL)],
+        [InlineKeyboardButton("✅ I Have Joined", callback_data='confirm_subscription')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "**🔍 Manual Subscription Check (Admin Only)**\n\n"
+        "1️⃣ Click 'Join Our Channel'.\n"
+        "2️⃣ After Joining, Click '✅ I Have Joined'.",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
+
+# ✅ Callback Handler for Manual Confirmation
+async def confirm_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = query.from_user
+
+    if await is_user_subscribed(context, user.id):
+        await query.answer("✅ You Are Subscribed!")
+        await query.edit_message_text("✅ **You Are Subscribed To The Channel!**")
+    else:
+        await query.answer("❌ Subscription Not Detected.")
+        await query.edit_message_text(
+            "⚠️ **It Seems You Are Not Subscribed.**\n\n"
+            "Please Join The Channel And Try Again."
+        )
+
+
+# ------------------------
 # 🚀 Main Function
+# ------------------------
 def main():
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("download", download))
-    application.add_handler(CommandHandler("check", check))
+    application.add_handler(CommandHandler("check_option1", check_option1))
+    application.add_handler(CommandHandler("check_option2", check_option2))
+    application.add_handler(CommandHandler("check_option3", check_option3))
     application.add_handler(CommandHandler("stats", stats))
+    application.add_handler(CallbackQueryHandler(confirm_subscription, pattern='^confirm_subscription$'))
     application.run_polling()
 
 
