@@ -3,7 +3,7 @@
 import os
 import logging
 import re
-from datetime import datetime, time, timedelta
+from datetime import datetime, time
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -44,7 +44,7 @@ download_stats = {
     "user_downloads": {}
 }
 
-# List to track all users who have interacted with the bot
+# Track users for reminders
 user_list = set()
 
 
@@ -160,20 +160,23 @@ async def daily_reminder(context: CallbackContext) -> None:
 # ------------------------
 def main():
     """
-    Initialize the bot and set up command handlers and scheduled tasks.
+    Initialize the bot, set up command handlers, and schedule tasks with JobQueue.
     """
     application = ApplicationBuilder().token(BOT_TOKEN).build()
+    job_queue = application.job_queue  # Initialize JobQueue
+    
+    # Command Handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("download", download))
     application.add_handler(CommandHandler("stats", stats))
-
-    # Daily reminder job
+    
+    # Daily Reminder Job
     reminder_hour, reminder_minute = map(int, REMINDER_TIME.split(':'))
-    application.job_queue.run_daily(
+    job_queue.run_daily(
         daily_reminder,
         time=time(reminder_hour, reminder_minute)
     )
-
+    
     application.run_polling()
 
 
