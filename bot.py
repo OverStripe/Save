@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 # ------------------------
-# ❖ Start Command
+# ⚡ Start Command
 # ------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -40,57 +40,57 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     full_name = f"{user.first_name or 'User'} {user.last_name or ''}".strip()
 
     keyboard = [
-        [InlineKeyboardButton("❖ 💻 Developer", url=f"https://t.me/{DEV_USERNAME}")],
+        [InlineKeyboardButton("⚡ 💻 Developer", url=f"https://t.me/{DEV_USERNAME}")],
     ]
 
     if SUPPORT_CHANNEL:
-        keyboard.append([InlineKeyboardButton("❖ 📢 Support Channel", url=SUPPORT_CHANNEL)])
+        keyboard.append([InlineKeyboardButton("⚡ 📢 Support Channel", url=SUPPORT_CHANNEL)])
 
-    keyboard.append([InlineKeyboardButton("❖ ℹ️ Help", callback_data='help')])
-    keyboard.append([InlineKeyboardButton("❖ 📥 Example Download", callback_data='example')])
+    keyboard.append([InlineKeyboardButton("⚡ ℹ️ Help", callback_data='help')])
+    keyboard.append([InlineKeyboardButton("⚡ 📥 Example Download", callback_data='example')])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        "❖ 👋 **Welcome!** 🌟\n\n"
-        "❖ **What Can I Do?**\n"
-        "❖ 📸 **/ig <URL>** → Download Instagram Media (Photo & Video)\n"
-        "❖ 📊 **/stats** → Admin Only Bot Stats\n\n"
-        "❖ **How To Use:**\n"
-        "❖ 🔗 Copy The Instagram Post URL.\n"
-        "❖ 📤 Send `/ig <URL>` To This Bot.\n"
-        "❖ 🎥 Enjoy Your Media!\n\n"
-        "❖ **Quick Access Below:**",
+        "⚡✨ **Welcome to the Ultimate Instagram Downloader Bot!** ✨⚡\n\n"
+        "⚡ **Available Commands:**\n"
+        "⚡ `/ig <URL>` → Download Instagram Media\n"
+        "⚡ `/stats` → Admin Only Stats\n\n"
+        "⚡ **Quick Start Guide:**\n"
+        "⚡ 🔗 Copy an Instagram media URL.\n"
+        "⚡ 📤 Send it using `/ig <URL>`.\n"
+        "⚡ 🎥 Enjoy seamless downloads!\n\n"
+        "⚡ **Quick Access Below:**",
         reply_markup=reply_markup,
         parse_mode='Markdown'
     )
 
 
 # ------------------------
-# ❖ Instagram Download Command (/ig) with Emoji Animations and Video Support
+# ⚡ Instagram Download Command (/ig) with Full Content Support
 # ------------------------
 async def ig_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Download Instagram media using an API and send it to the user with emoji animations.
+    Download Instagram media using an API and send it to the user.
+    Supports all content types: Photos, Videos, Carousels.
     """
     if len(context.args) == 0:
-        await update.message.reply_text("❖ ⚠️ **Please Provide A Valid Instagram URL.**")
+        await update.message.reply_text("⚡⚠️ **Please Provide A Valid Instagram URL.**")
         return
 
     url = context.args[0]
-    sent_message = await update.message.reply_text("❖ ⏳ **Fetching Media... Please Wait!**")
+    sent_message = await update.message.reply_text("⚡🌀 **Initializing Media Fetch... Please Wait!**")
 
     try:
-        # Emoji animation stages
+        # Animated Progress Stages
         stages = [
-            "❖ ⏳ **Validating URL...** 🔗",
-            "❖ 🔄 **Connecting To Server...** 🌐",
-            "❖ 📥 **Downloading Media...** 📸",
-            "❖ 💾 **Processing File...** 🛠️",
-            "❖ ✅ **Almost Done...** 🎯"
+            "⚡🔗 **Validating URL...**",
+            "⚡🌐 **Connecting to Instagram Servers...**",
+            "⚡📥 **Fetching Media Details...**",
+            "⚡🛠️ **Processing Content...**",
+            "⚡🎯 **Finalizing Your Request...**"
         ]
 
-        # Simulate animation stages
         for stage in stages:
             await asyncio.sleep(1.5)
             await sent_message.edit_text(stage)
@@ -101,37 +101,54 @@ async def ig_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             response.raise_for_status()
             data = response.json()
 
-        content_url = data.get("content_url")
-        if content_url:
+        contents = data.get("content_urls", [data.get("content_url")])
+        
+        if not contents:
+            await sent_message.edit_text("⚡❌ **No Media Found. Please Check The URL.**")
+            return
+
+        # Handle multiple content items (Carousel or Single Content)
+        for idx, content_url in enumerate(contents):
             if content_url.endswith(('.jpg', '.jpeg', '.png')):
                 await context.bot.send_photo(
                     chat_id=update.effective_chat.id,
                     photo=content_url,
-                    caption="❖ ✅ **Here is your Instagram Photo!** 📸"
+                    caption=f"⚡✅ **Photo {idx + 1} Sent Successfully!**"
                 )
-            elif content_url.endswith('.mp4'):
-                await context.bot.send_video(
-                    chat_id=update.effective_chat.id,
-                    video=content_url,
-                    caption="❖ ✅ **Here is your Instagram Video!** 🎥"
-                )
+            elif content_url.endswith('.mp4') or '/videos/' in content_url:
+                # Check if video size is within Telegram limits
+                async with httpx.AsyncClient() as client:
+                    video_response = await client.head(content_url)
+                    content_length = int(video_response.headers.get('Content-Length', 0))
+                    max_size = 50 * 1024 * 1024  # 50MB limit for Telegram bots
+
+                    if content_length > max_size:
+                        await update.message.reply_text(
+                            f"⚡🚫 **Video {idx + 1} is too large to send on Telegram.**\n"
+                            f"⚡🔗 **Direct Link:** [Click Here]({content_url})",
+                            disable_web_page_preview=True
+                        )
+                    else:
+                        await context.bot.send_video(
+                            chat_id=update.effective_chat.id,
+                            video=content_url,
+                            caption=f"⚡✅ **Video {idx + 1} Sent Successfully!**"
+                        )
             else:
-                await sent_message.edit_text("❖ ⚠️ **Unsupported Content Type Found.**")
-            
-            await sent_message.edit_text("❖ ✅ **Media Sent Successfully! 🎉**")
-        else:
-            await sent_message.edit_text("❖ ⚠️ **Unable To Fetch Content. Please Check The URL.**")
+                await sent_message.edit_text("⚡❌ **Unsupported Content Type Found.**")
+
+        await sent_message.edit_text("⚡🎉 **All Media Sent Successfully!**")
 
     except httpx.HTTPStatusError as e:
-        logger.error(f"❖ ❌ API Error: {e}")
-        await sent_message.edit_text("❖ ❌ **API Error. Please Try Again Later.**")
+        logger.error(f"⚡❌ API Error: {e}")
+        await sent_message.edit_text("⚡❌ **API Error. Please Try Again Later.**")
     except Exception as e:
-        logger.error(f"❖ ❌ Error: {e}")
-        await sent_message.edit_text(f"❖ ❌ **An Error Occurred:** {str(e)}")
+        logger.error(f"⚡❌ Error: {e}")
+        await sent_message.edit_text(f"⚡❌ **An Error Occurred:** {str(e)}")
 
 
 # ------------------------
-# ❖ Stats Command (Admin Only)
+# ⚡ Stats Command (Admin Only)
 # ------------------------
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -139,26 +156,19 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     user = update.effective_user
     if user.id != DEV_USER_ID:
-        await update.message.reply_text("❖ ⚠️ **This Command Is Admin Only. 🚫**")
+        await update.message.reply_text("⚡🚫 **This Command Is Admin Only.**")
         return
 
     await update.message.reply_text(
-        f"❖ 📊 **Bot Stats:**\n\n"
-        f"❖ 🕒 **Uptime:** Active\n"
-        f"❖ 📥 **Total Downloads:** API Based\n"
-        f"❖ 👤 **Unique Users:** API Based"
+        f"⚡📊 **Bot Stats:**\n\n"
+        f"⚡🕒 **Uptime:** Active\n"
+        f"⚡📥 **Total Downloads:** API Based\n"
+        f"⚡👤 **Unique Users:** API Based"
     )
 
 
 # ------------------------
-# ❖ Error Handler
-# ------------------------
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    logger.error(f"❖ ❌ Update {update} caused error {context.error}")
-
-
-# ------------------------
-# ❖ Main Function
+# ⚡ Main Function
 # ------------------------
 def main():
     """
@@ -171,11 +181,8 @@ def main():
     application.add_handler(CommandHandler("ig", ig_command_handler))
     application.add_handler(CommandHandler("stats", stats))
 
-    # Error Handler
-    application.add_error_handler(error_handler)
-
     # Start the Bot
-    logger.info("❖ 🚀 Bot is starting...")
+    logger.info("⚡ Bot is starting...")
     application.run_polling()
 
 
