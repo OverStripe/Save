@@ -16,7 +16,7 @@ from telegram.ext import (
 )
 from dotenv import load_dotenv
 
-# Load environment variables
+# ✜ Load Environment Variables
 load_dotenv()
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SUPPORT_CHANNEL = os.getenv("SUPPORT_CHANNEL")
@@ -24,7 +24,7 @@ DEV_USERNAME = os.getenv("DEV_USERNAME")
 DEV_USER_ID = int(os.getenv("DEV_USER_ID"))
 API_URL = os.getenv("API_URL")
 
-# Logging setup
+# ✜ Logging Configuration
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
@@ -50,9 +50,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     await update.message.reply_text(
         f"✜ Welcome, {full_name}!\n\n"
-        "✜ Commands:\n"
-        "✜ `/ig <URL>` → Download Instagram Media\n"
-        "✜ `/help` → Show All Commands\n\n"
+        "✜ Use `/ig <URL>` to download Instagram media.\n"
+        "✜ Admins can use `/stats`.\n"
+        "✜ Get help using `/help`.\n\n"
         "✜ Quick Links Below:",
         reply_markup=reply_markup,
         parse_mode='HTML'
@@ -62,17 +62,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # ✜ Help Command
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Show a list of all available commands.
+    Display all available commands.
     """
     await update.message.reply_text(
         "✜ Available Commands:\n\n"
         "✜ `/start` → Start the bot\n"
         "✜ `/ig <URL>` → Download Instagram Media\n"
         "✜ `/stats` → Admin Stats (Developer Only)\n"
-        "✜ `/help` → Show All Commands\n\n"
-        "✜ Usage Example:\n"
+        "✜ `/help` → Show all commands\n\n"
+        "✜ Example Usage:\n"
         "`/ig https://www.instagram.com/reel/EXAMPLE/`\n\n"
-        "✜ For support, click below:",
+        "✜ For Support:",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("✜ Support", url=SUPPORT_CHANNEL)],
             [InlineKeyboardButton("✜ Developer", url=f"https://t.me/{DEV_USERNAME}")]
@@ -87,7 +87,7 @@ async def ig_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     Download Instagram media via API and send it to the user.
     """
     if len(context.args) == 0:
-        await update.message.reply_text("✜ Please Provide A Valid Instagram URL.")
+        await update.message.reply_text("✜ Please provide a valid Instagram URL.")
         return
 
     url = context.args[0]
@@ -95,11 +95,11 @@ async def ig_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     sent_message = await update.message.reply_text("✜ Fetching Media... Please Wait!")
 
     try:
-        # Animated Progress Stages
+        # ✜ Animated Progress
         stages = [
             "✜ Validating URL...",
             "✜ Connecting to Server...",
-            "✜ Fetching Content...",
+            "✜ Fetching Media...",
             "✜ Processing Media...",
             "✜ Finalizing..."
         ]
@@ -108,7 +108,7 @@ async def ig_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await asyncio.sleep(1.5)
             await sent_message.edit_text(stage)
 
-        # Fetch media from API
+        # ✜ Fetch Media via API
         async with httpx.AsyncClient() as client:
             response = await client.get(API_URL, params={"url": url})
             response.raise_for_status()
@@ -118,39 +118,57 @@ async def ig_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         content_url = data.get("content_url")
 
         if content_url:
-            if content_url.endswith(('.jpg', '.jpeg', '.png')):
-                await context.bot.send_photo(
-                    chat_id=update.effective_chat.id,
-                    photo=content_url,
-                    caption="✜ Here is your Instagram Photo!"
-                )
-            elif content_url.endswith('.mp4') or '/videos/' in content_url:
+            try:
+                if content_url.endswith(('.jpg', '.jpeg', '.png')):
+                    await context.bot.send_photo(
+                        chat_id=update.effective_chat.id,
+                        photo=content_url,
+                        caption="✜ Here is your Instagram Photo!"
+                    )
+                elif content_url.endswith('.mp4') or '/videos/' in content_url:
+                    async with httpx.AsyncClient() as client:
+                        video_response = await client.head(content_url)
+                        content_length = int(video_response.headers.get('Content-Length', 0))
+                        max_size = 50 * 1024 * 1024  # 50MB limit
+
+                        if content_length > max_size:
+                            raise ValueError("Video size exceeds Telegram limits.")
+                        await context.bot.send_video(
+                            chat_id=update.effective_chat.id,
+                            video=content_url,
+                            caption="✜ Here is your Instagram Video!"
+                        )
+                else:
+                    raise ValueError("Unsupported content type.")
+            except Exception:
                 await update.message.reply_text(
-                    f"✜ Video is ready!\n"
-                    f"✜ Download it directly here: [Click Here]({content_url})",
+                    f"✜ Unable to send media directly.\n"
+                    f"✜ Download it here: [Direct Link]({content_url})",
                     disable_web_page_preview=True
                 )
-            else:
-                await sent_message.edit_text("✜ Unsupported Content Type Found.")
         else:
-            await sent_message.edit_text("✜ No Media Found. Check the URL.")
+            await sent_message.edit_text("✜ No media found. Please check the URL.")
 
     except httpx.HTTPStatusError as e:
         logger.error(f"✜ API Error: {e}")
-        await sent_message.edit_text("✜ API Error. Please Try Again Later.")
+        await update.message.reply_text("✜ API Error. Please try again later.")
     except Exception as e:
         logger.error(f"✜ Error: {e}")
-        await sent_message.edit_text(f"✜ An Error Occurred: {str(e)}")
+        await update.message.reply_text(
+            f"✜ An error occurred. You can download manually here:\n"
+            f"[Direct Link]({url})",
+            disable_web_page_preview=True
+        )
 
 
 # ✜ Stats Command (Admin Only)
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Display bot stats (Admin Only).
+    Display bot stats (Developer Only).
     """
     user = update.effective_user
     if user.id != DEV_USER_ID:
-        await update.message.reply_text("✜ This Command Is Admin Only.")
+        await update.message.reply_text("✜ This command is restricted to the developer.")
         return
 
     await update.message.reply_text(
