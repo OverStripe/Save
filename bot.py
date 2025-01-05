@@ -4,6 +4,7 @@ import os
 import logging
 import re
 import asyncio
+import tempfile
 from datetime import datetime, time
 from telegram import (
     Update,
@@ -55,7 +56,7 @@ user_list = set()
 # ------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Send a welcome message with inline buttons and instructions.
+    Send a welcome message with symbol-only instructions.
     """
     user = update.effective_user
     full_name = f"{user.first_name or 'User'} {user.last_name or ''}".strip()
@@ -74,105 +75,110 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        f"**❖ 👋 Welcome, {full_name}! 🌟**\n\n"
-        "**❖ What Can I Do?**\n"
-        "- ❖ 📸 **/Download <URL>** → Download Instagram Media\n"
-        "- ❖ 📊 **/Stats** → Admin Only Bot Stats\n\n"
-        "**❖ How To Use:**\n"
-        "1️⃣ Copy The Instagram Post URL.\n"
-        "2️⃣ Send `/Download <URL>` To This Bot.\n"
-        "3️⃣ Enjoy Your Media! 🥳\n\n"
-        "**❖ Quick Access Below:**",
+        "❖ 👋 **Welcome!** 🌟\n\n"
+        "❖ **What Can I Do?**\n"
+        "❖ 📸 **/Download <URL>** → Download Instagram Media\n"
+        "❖ 📊 **/Stats** → Admin Only Bot Stats\n\n"
+        "❖ **How To Use:**\n"
+        "❖ 🔗 Copy The Instagram Post URL.\n"
+        "❖ 📤 Send `/Download <URL>` To This Bot.\n"
+        "❖ 🎥 Enjoy Your Media!\n\n"
+        "❖ **Quick Access Below:**",
         reply_markup=reply_markup,
         parse_mode='Markdown'
     )
 
 
 # ------------------------
-# ❖ Download Command with Animated Emojis
+# ❖ Download Command with Scheduled Auto-Delete
 # ------------------------
+async def delete_file_after_delay(context: CallbackContext) -> None:
+    """
+    Delete a specific file after a delay.
+    """
+    file_path = context.job.data
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            logger.info(f"❖ 🧹 Deleted file after delay: {file_path}")
+    except Exception as e:
+        logger.error(f"❖ ⚠️ Failed to delete file: {e}")
+
+
 async def download(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Download Instagram media with animated emoji-based progress updates.
+    Download Instagram media, send it to the user, and schedule auto-delete after 5 minutes.
     """
     user = update.effective_user
     user_list.add(user.id)
 
     if len(context.args) == 0:
-        await update.message.reply_text("❖ ⚠️ **Please Provide A Valid Instagram URL.**")
+        await update.message.reply_text("❖ ⚠️ Please Provide A Valid Instagram URL.")
         return
 
     url = context.args[0]
     if not INSTAGRAM_URL_PATTERN.match(url):
         await update.message.reply_text(
-            "❖ ⚠️ **Invalid Instagram URL.**\n"
+            "❖ ⚠️ Invalid Instagram URL.\n"
             "Ensure it starts with `https://` and matches formats like:\n"
-            "- `https://www.instagram.com/p/ID/`\n"
-            "- `https://www.instagram.com/reel/ID/`\n"
-            "- `https://www.instagram.com/tv/ID/`"
+            "❖ https://www.instagram.com/p/ID/\n"
+            "❖ https://www.instagram.com/reel/ID/\n"
+            "❖ https://www.instagram.com/tv/ID/"
         )
         return
 
-    sent_message = await update.message.reply_text("❖ ⏳ **Preparing Your Download... 🛠️**")
-    
-    stages = [
-        "❖ ⏳ **Downloading Media... 📥**",
-        "❖ 🔄 **Extracting Content... 🔧**",
-        "❖ 💾 **Saving Media... 💻**",
-        "❖ ✅ **Download Complete! 🎉**"
-    ]
+    sent_message = await update.message.reply_text("❖ ⏳ Preparing Your Download...")
 
+    # Simulated progress animation
+    stages = [
+        "❖ ⏳ Downloading Media...",
+        "❖ 🔄 Extracting Content...",
+        "❖ 💾 Saving Media...",
+        "❖ ✅ Download Complete!"
+    ]
     for stage in stages:
         await asyncio.sleep(1.5)
         await sent_message.edit_text(stage)
-    
+
     try:
         shortcode = re.search(r"/(p|reel|tv)/([\w\-]+)", url).group(2)
-        post = Post.from_shortcode(loader.context, shortcode)
-        loader.download_post(post, target=user.username or "instagram_download")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
+            temp_file_path = temp_file.name
 
-        await sent_message.edit_text("❖ ✅ **Media Downloaded Successfully! 🎯**")
+        post = Post.from_shortcode(loader.context, shortcode)
+        loader.download_post(post, target=temp_file_path)
+
+        if temp_file_path.endswith(('.jpg', '.jpeg', '.png')):
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(temp_file_path, 'rb'))
+        elif temp_file_path.endswith(('.mp4', '.mov')):
+            await context.bot.send_video(chat_id=update.effective_chat.id, video=open(temp_file_path, 'rb'))
+        
+        await sent_message.edit_text("❖ ✅ Media Sent Successfully!")
+
+        # Schedule auto-delete after 5 minutes
+        context.job_queue.run_once(delete_file_after_delay, 300, data=temp_file_path)
+
     except Exception as e:
-        logger.error(f"Download failed: {e}")
-        await sent_message.edit_text(
-            f"❖ ❌ **Failed To Download Media. 😔**\nError: {str(e)}"
-        )
+        logger.error(f"❖ ❌ Download failed: {e}")
+        await sent_message.edit_text(f"❖ ❌ Failed To Download Media.\nError: {str(e)}")
 
 
 # ------------------------
 # ❖ Stats Command (Admin Only)
 # ------------------------
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Display bot stats (Admin Only).
-    """
     user = update.effective_user
     if user.id != DEV_USER_ID:
-        await update.message.reply_text("❖ ⚠️ **This Command Is Admin Only. 🚫**")
+        await update.message.reply_text("❖ ⚠️ This Command Is Admin Only. 🚫")
         return
 
     uptime = datetime.now() - bot_start_time
     await update.message.reply_text(
         f"❖ 📊 **Bot Stats:**\n\n"
-        f"❖ 🕒 **Uptime:** {uptime}\n"
-        f"❖ 📥 **Total Downloads:** {download_stats['total_downloads']} 📊\n"
-        f"❖ 👤 **Unique Users:** {len(download_stats['user_downloads'])} 👥"
+        f"❖ 🕒 Uptime: {uptime}\n"
+        f"❖ 📥 Total Downloads: {download_stats['total_downloads']}\n"
+        f"❖ 👤 Unique Users: {len(download_stats['user_downloads'])}"
     )
-
-
-# ------------------------
-# ❖ Daily Reminder Job
-# ------------------------
-async def daily_reminder(context: CallbackContext) -> None:
-    for user_id in user_list:
-        try:
-            await context.bot.send_message(
-                chat_id=user_id,
-                text="❖ ⚠️ **Don't Miss Important Updates!**\n📢 [Join @TechPiroBots]({SUPPORT_CHANNEL})",
-                parse_mode='Markdown'
-            )
-        except Exception as e:
-            logger.error(f"Failed to send reminder to {user_id}: {e}")
 
 
 # ------------------------
@@ -181,14 +187,11 @@ async def daily_reminder(context: CallbackContext) -> None:
 def main():
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     job_queue = application.job_queue
-    
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("download", download))
     application.add_handler(CommandHandler("stats", stats))
 
-    reminder_hour, reminder_minute = map(int, REMINDER_TIME.split(':'))
-    job_queue.run_daily(daily_reminder, time=time(reminder_hour, reminder_minute))
-    
     application.run_polling()
 
 
