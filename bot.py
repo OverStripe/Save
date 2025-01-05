@@ -7,13 +7,12 @@ from datetime import datetime, timedelta
 from telegram import (
     Update,
     InlineKeyboardButton,
-    InlineKeyboardMarkup
+    InlineKeyboardMarkup,
 )
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     ContextTypes,
-    CallbackQueryHandler
 )
 from instaloader import Instaloader, Post
 from dotenv import load_dotenv
@@ -54,44 +53,26 @@ async def is_user_subscribed(context: ContextTypes.DEFAULT_TYPE, user_id: int) -
         logger.error(f"Error checking channel subscription: {e}")
         return False
 
-async def enforce_channel_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    user = update.effective_user
-    if not await is_user_subscribed(context, user.id):
-        keyboard = [
-            [InlineKeyboardButton("📢 Join Our Channel", url=SUPPORT_CHANNEL)]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            "⚠️ **You must subscribe to our channel before using this bot.**\n\n"
-            f"📢 [Join Channel]({SUPPORT_CHANNEL})",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-        return False
-    return True
-
 # ------------------------
 # 📲 START COMMAND
 # ------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not await enforce_channel_subscription(update, context):
-        return
-    
     keyboard = [
-        [InlineKeyboardButton("💻 Developer", url=f"https://t.me/{DEV_USERNAME}")],
-        [InlineKeyboardButton("📢 Channel", url=SUPPORT_CHANNEL)],
-        [InlineKeyboardButton("ℹ️ Help", callback_data='help')],
-        [InlineKeyboardButton("📥 Download Example", callback_data='example')]
+        [InlineKeyboardButton("💻 ᴅᴇᴠᴇʟᴏᴘᴇʀ", url=f"https://t.me/{DEV_USERNAME}")],
+        [InlineKeyboardButton("📢 ꜱᴜᴘᴘᴏʀᴛ ᴄʜᴀɴɴᴇʟ", url=SUPPORT_CHANNEL)],
+        [InlineKeyboardButton("ℹ️ ʜᴇʟᴘ", callback_data='help')],
+        [InlineKeyboardButton("📥 ᴇxᴀᴍᴘʟᴇ ᴅᴏᴡɴʟᴏᴀᴅ", callback_data='example')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        "━❖ **Philo ❖ Downloader ❖** ━\n\n"
-        "👋 **Welcome to the Philo Downloader Bot!**\n\n"
-        "🔗 **How to Use:**\n"
-        "1️⃣ Send me an Instagram post URL.\n"
-        "2️⃣ Use `/download <URL>` to fetch media.\n\n"
-        "📲 **Quick Access Below:**",
+        "**━❖ ᴾᴴᴵᴸᴼ ❖ ᴰᴼᵂᴺᴸᴼᴬᴰᴱᴿ ❖━**\n\n"
+        "👋 **ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ ᴘʜɪʟᴏ ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ!**\n\n"
+        "✨ **ᴡʜᴀᴛ ɪ ᴄᴀɴ ᴅᴏ:**\n"
+        "- 🔹 **/Download <URL> → ᴅᴏᴡɴʟᴏᴀᴅ ɪɴꜱᴛᴀɢʀᴀᴍ ᴍᴇᴅɪᴀ.**\n"
+        "- 🔹 **/Check → ᴄʜᴇᴄᴋ ꜱᴜʙꜱᴄʀɪᴘᴛɪᴏɴ.**\n"
+        "- 🔹 **/Help → ᴠɪᴇᴡ ʜᴇʟᴘ ᴍᴇɴᴜ.**\n\n"
+        "📲 **ᴜꜱᴇ ᴛʜᴇ ʙᴜᴛᴛᴏɴꜱ ʙᴇʟᴏᴡ ᴛᴏ ꜱᴛᴀʀᴛ!**",
         reply_markup=reply_markup,
         parse_mode='Markdown'
     )
@@ -100,61 +81,35 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # 📥 DOWNLOAD COMMAND
 # ------------------------
 async def download(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not await enforce_channel_subscription(update, context):
+    user = update.effective_user
+    if not await is_user_subscribed(context, user.id):
+        await update.message.reply_text(
+            "⚠️ **ᴘʟᴇᴀꜱᴇ ᴊᴏɪɴ ᴏᴜʀ ᴄʜᴀɴɴᴇʟ ꜰɪʀꜱᴛ:**\n"
+            f"📢 [ᴊᴏɪɴ ʜᴇʀᴇ]({SUPPORT_CHANNEL})",
+            parse_mode='Markdown'
+        )
         return
 
-    user = update.effective_user
     if len(context.args) == 0:
-        await update.message.reply_text("⚠️ Please provide an Instagram post URL.\nUsage: `/download <URL>`")
+        await update.message.reply_text("⚠️ **ᴘʟᴇᴀꜱᴇ ᴘʀᴏᴠɪᴅᴇ ᴀ ᴠᴀʟɪᴅ ᴜʀʟ.**")
         return
 
     url = context.args[0]
     if not INSTAGRAM_URL_PATTERN.match(url):
-        await update.message.reply_text("⚠️ Invalid Instagram URL. Please provide a valid Instagram post URL.")
+        await update.message.reply_text("⚠️ **ɪɴᴠᴀʟɪᴅ ᴜʀʟ.**")
         return
 
-    await update.message.reply_text("⏳ **Downloading your media... Please wait.**")
-    try:
-        shortcode = url.split("/p/")[1].split("/")[0]
-        post = Post.from_shortcode(loader.context, shortcode)
-
-        loader.download_post(post, target='downloads')
-        file_path = f"downloads/{shortcode}.{'mp4' if post.is_video else 'jpg'}"
-        
-        if post.is_video:
-            await update.message.reply_video(open(file_path, "rb"))
-        else:
-            await update.message.reply_photo(open(file_path, "rb"))
-
-        download_stats["total_downloads"] += 1
-        download_stats["user_downloads"][user.id] = download_stats["user_downloads"].get(user.id, 0) + 1
-
-        await update.message.reply_text("✅ **Download Complete! Enjoy your media.**")
-
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        await update.message.reply_text("❌ Failed to download the post. Please try again later.")
+    await update.message.reply_text("⏳ **ᴘʀᴏᴄᴇꜱꜱɪɴɢ ᴅᴏᴡɴʟᴏᴀᴅ...**")
 
 # ------------------------
-# ℹ️ HELP COMMAND
+# ✅ CHECK COMMAND
 # ------------------------
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    keyboard = [
-        [InlineKeyboardButton("🏠 Home", callback_data='home')],
-        [InlineKeyboardButton("📢 Channel", url=SUPPORT_CHANNEL)],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        "**ℹ️ Help Menu**\n\n"
-        "📝 **Commands:**\n"
-        "- `/start` → Start the bot.\n"
-        "- `/download <URL>` → Download Instagram media.\n"
-        "- `/stats` → (Developer Only)\n\n"
-        "📲 Use the buttons below for quick access.",
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
-    )
+async def check(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    if await is_user_subscribed(context, user.id):
+        await update.message.reply_text("✅ **ʏᴏᴜ'ʀᴇ ꜱᴜʙꜱᴄʀɪʙᴇᴅ!**")
+    else:
+        await update.message.reply_text("⚠️ **ᴘʟᴇᴀꜱᴇ ᴊᴏɪɴ ᴏᴜʀ ᴄʜᴀɴɴᴇʟ.**")
 
 # ------------------------
 # 🚀 MAIN FUNCTION
@@ -162,8 +117,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 def main():
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("download", download))
+    application.add_handler(CommandHandler("check", check))
     application.run_polling()
 
 if __name__ == '__main__':
